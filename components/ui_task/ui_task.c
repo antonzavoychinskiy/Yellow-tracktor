@@ -1,0 +1,45 @@
+#include "ui_task.h"
+#include "config.h"
+#include "state_machine_task.h"
+#include "mission_ui.h"
+#include "auto_sequence.h"
+#include "ui.h"
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
+#define UI_TASK_STACK       8192 /* LVGL — с запасом */
+#define UI_TASK_PRIO         (tskIDLE_PRIORITY + 2) /* ниже RT-уровня — NFR-1 */
+#define UI_TASK_CORE          1                       /* NFR-3 */
+#define UI_TICK_PERIOD_MS    20
+
+static bool is_off_state(sm_state_t s)
+{
+    return s == SM_STATE_OFF_WAIT_STOP || s == SM_STATE_OFF_WAIT_DISARM_CONFIRM ||
+           s == SM_STATE_OFF_IDLE || s == SM_STATE_OFF_FAILED;
+}
+
+static void ui_task_fn(void *arg)
+{
+    /* LVGL инициализируется здесь же, а не в main.c — все обращения к
+     * нему должны идти из одного и того же task-контекста (LVGL 8.3
+     * без явной блокировки не потокобезопасен). */
+    ESP_ERROR_CHECK(ui_init());
+
+    TickType_t last_wake = xTaskGetTickCount();
+    while (1) {
+        sm_state_t sm_state = state_machine_get_state();
+        mission_ui_hal_tick(is_off_state(sm_state)); /* FR-27 */
+        auto_sequence_hal_tick(sm_state == SM_STATE_AUTO); /* FR-40.x */
+        ui_tick(); /* FR-41..46 */
+
+        vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(UI_TICK_PERIOD_MS));
+    }
+}
+
+esp_err_t ui_task_start(void)
+{
+    BaseType_t ok = xTaskCreatePinnedToCore(ui_task_fn, "ui_task", UI_TASK_STACK, NULL,
+                                             UI_TASK_PRIO, NULL, UI_TASK_CORE);
+    return ok == pdPASS ? ESP_OK : ESP_ERR_NO_MEM;
+}
