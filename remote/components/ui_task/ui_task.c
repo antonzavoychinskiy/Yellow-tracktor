@@ -3,6 +3,7 @@
 #include "state_machine_task.h"
 #include "mission_ui.h"
 #include "auto_sequence.h"
+#include "buzzer.h"
 #include "ui.h"
 
 #include "freertos/FreeRTOS.h"
@@ -19,6 +20,15 @@ static bool is_off_state(sm_state_t s)
            s == SM_STATE_OFF_IDLE || s == SM_STATE_OFF_FAILED;
 }
 
+static buzzer_mode_t buzzer_mode_for_auto_seq_state(auto_sequence_state_t s)
+{
+    switch (s) {
+    case AUTO_SEQ_CONFIRM_HOLD: return BUZZER_MODE_BEEP_HOLD;           /* FR-40.5 */
+    case AUTO_SEQ_CONFIRM_COUNTDOWN: return BUZZER_MODE_BEEP_COUNTDOWN; /* FR-40.6 */
+    default: return BUZZER_MODE_OFF;
+    }
+}
+
 static void ui_task_fn(void *arg)
 {
     /* LVGL инициализируется здесь же, а не в main.c — все обращения к
@@ -31,6 +41,8 @@ static void ui_task_fn(void *arg)
         sm_state_t sm_state = state_machine_get_state();
         mission_ui_hal_tick(is_off_state(sm_state)); /* FR-27 */
         auto_sequence_hal_tick(sm_state == SM_STATE_AUTO); /* FR-40.x */
+        buzzer_hal_set_mode(buzzer_mode_for_auto_seq_state(auto_sequence_hal_get_state())); /* FR-40.7 */
+        buzzer_hal_tick();
         ui_tick(); /* FR-41..46 */
 
         vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(UI_TICK_PERIOD_MS));

@@ -7,7 +7,7 @@
 #include "mission_ui.h"
 #include "auto_sequence.h"
 #include "telemetry_source.h"
-#include "nunchuk.h"
+#include "joystick_adc.h"
 #include "ardurover_modes.h"
 
 #include "lvgl.h"
@@ -48,6 +48,7 @@ static lv_obj_t *s_page_auto;
 static lv_obj_t *s_lbl_auto_mode;
 static lv_obj_t *s_lbl_auto_wp;
 static lv_obj_t *s_lbl_auto_ready;
+static lv_obj_t *s_bar_auto_confirm; /* FR-40.5 */
 static lv_obj_t *s_lbl_auto_battery;
 
 /* ===================== Вспомогательное ===================== */
@@ -172,6 +173,10 @@ static void build_pages(void)
     s_lbl_auto_mode = mklabel(s_page_auto);
     s_lbl_auto_wp = mklabel(s_page_auto);
     s_lbl_auto_ready = mklabel(s_page_auto);
+    s_bar_auto_confirm = lv_bar_create(s_page_auto); /* FR-40.5: полоса удержания «Пуск» */
+    lv_obj_set_width(s_bar_auto_confirm, LV_PCT(90));
+    lv_bar_set_range(s_bar_auto_confirm, 0, 1000);
+    lv_obj_add_flag(s_bar_auto_confirm, LV_OBJ_FLAG_HIDDEN);
     s_lbl_auto_battery = mklabel(s_page_auto);
 }
 
@@ -265,7 +270,7 @@ static void update_warn_banner(sm_state_t sm)
         lv_label_set_text(s_warn_banner, "ВНИМАНИЕ: расхождение режима — HOLD");
         lv_obj_clear_flag(s_warn_banner, LV_OBJ_FLAG_HIDDEN);
     } else if (sm == SM_STATE_LOCAL_ACTIVE &&
-               nunchuk_hal_consecutive_failures() >= MODULE_I2C_FAIL_THRESHOLD) {
+               joystick_adc_hal_consecutive_failures() >= MODULE_JOYSTICK_FAIL_THRESHOLD) {
         lv_label_set_text(s_warn_banner, "ОТКАЗ ДЖОЙСТИКА"); /* FR-37.1 */
         lv_obj_clear_flag(s_warn_banner, LV_OBJ_FLAG_HIDDEN);
     } else {
@@ -357,13 +362,27 @@ static void update_auto_page(const mavlink_telemetry_snapshot_t *snap)
     lv_label_set_text_fmt(s_lbl_auto_wp, "Точка маршрута: %u",
                            snap->have_mission_current ? (unsigned)snap->mission_current_seq : 0);
 
-    switch (auto_sequence_hal_get_state()) {
+    auto_sequence_state_t seq_state = auto_sequence_hal_get_state();
+    switch (seq_state) {
     case AUTO_SEQ_READY: lv_label_set_text(s_lbl_auto_ready, "Готов к пуску — нажмите «Пуск»"); break;
     case AUTO_SEQ_BLOCKED: lv_label_set_text(s_lbl_auto_ready, "Пуск недоступен: маршрут не загружен"); break; /* FR-40.1 */
+    case AUTO_SEQ_CONFIRM_HOLD: lv_label_set_text(s_lbl_auto_ready, "Удерживайте «Пуск»..."); break; /* FR-40.5 */
+    case AUTO_SEQ_CONFIRM_COUNTDOWN:
+        lv_label_set_text_fmt(s_lbl_auto_ready, "Активация Авторежима через %lu",
+                               (unsigned long)auto_sequence_hal_get_confirm_countdown_seconds_left()); /* FR-40.6 */
+        break;
     case AUTO_SEQ_ARMING: lv_label_set_text(s_lbl_auto_ready, "Арминг..."); break;
     case AUTO_SEQ_ARM_FAILED: lv_label_set_text(s_lbl_auto_ready, "Отказ арминга — нажмите «Пуск» ещё раз"); break;
     case AUTO_SEQ_SETTING_MODE: lv_label_set_text(s_lbl_auto_ready, "Перевод в AUTO..."); break;
     case AUTO_SEQ_MOVING: lv_label_set_text(s_lbl_auto_ready, "Движение по маршруту"); break;
+    }
+
+    if (seq_state == AUTO_SEQ_CONFIRM_HOLD) {
+        lv_bar_set_value(s_bar_auto_confirm, (int32_t)auto_sequence_hal_get_confirm_hold_progress_permille(),
+                          LV_ANIM_OFF);
+        lv_obj_clear_flag(s_bar_auto_confirm, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(s_bar_auto_confirm, LV_OBJ_FLAG_HIDDEN);
     }
 
     if (snap->have_sys_status) {

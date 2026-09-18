@@ -16,12 +16,13 @@
 #include "keyswitch.h"
 #include "buttons.h"
 #include "encoder.h"
-#include "nunchuk.h"
+#include "joystick_adc.h"
 #include "display.h"
 #include "telemetry_source.h"
 #include "control_loop.h"
 #include "mission_ui.h"
 #include "auto_sequence.h"
+#include "buzzer.h"
 #include "state_machine_task.h"
 #include "ui_task.h"
 
@@ -35,11 +36,12 @@ void app_main(void)
     keyswitch_hal_init();
     buttons_hal_init();
     encoder_hal_init();
-    nunchuk_hal_init();
+    ESP_ERROR_CHECK(joystick_adc_hal_init());
     display_hal_init();
     control_loop_hal_init();
     mission_ui_hal_init();
     auto_sequence_hal_init();
+    buzzer_hal_init();
 
     ESP_ERROR_CHECK(telemetry_source_init());
     ESP_ERROR_CHECK(state_machine_start());

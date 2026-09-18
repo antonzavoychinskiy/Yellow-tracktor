@@ -11,6 +11,12 @@
 #include "control_loop.h"
 #include "config.h"
 
+/* Отклонения задаются долей полного хода оси, а не абсолютными
+ * отсчётами: сырая шкала зависит от типа джойстика (сейчас ADC 12
+ * бит), а проверяемая логика — нет. */
+#define AXIS_MAX   (MODULE_JOYSTICK_RAW_FULL_SCALE - 1)
+#define AXIS_HALF  (MODULE_JOYSTICK_RAW_FULL_SCALE / 2)
+
 /* FR-15/FR-17: нейтраль, пока джойстик не пройдёт через нейтраль хотя бы раз. */
 static void test_initial_neutral_gate(void)
 {
@@ -18,7 +24,7 @@ static void test_initial_neutral_gate(void)
     control_loop_state_t st;
     control_loop_reset(&st);
 
-    control_loop_joystick_input_t in = { .valid = true, .raw_x = 80, .raw_y = 0, .dead_man_held = true };
+    control_loop_joystick_input_t in = { .valid = true, .raw_x = AXIS_HALF, .raw_y = 0, .dead_man_held = true };
     control_loop_output_t out;
     control_loop_tick(&st, &in, &out);
 
@@ -32,7 +38,7 @@ static void test_initial_neutral_gate(void)
     control_loop_tick(&st, &in, &out);
     TEST_ASSERT(!out.movement_allowed);
 
-    in.raw_x = 50; /* теперь можно двигаться (мёртвая рука уже удержана) */
+    in.raw_x = AXIS_HALF; /* теперь можно двигаться (мёртвая рука уже удержана) */
     control_loop_tick(&st, &in, &out);
     TEST_ASSERT(out.movement_allowed);
 }
@@ -50,7 +56,7 @@ static void test_dead_man_gating(void)
     control_loop_tick(&st, &in, &out);
 
     /* без мёртвой руки движение запрещено, даже если джойстик отклонён */
-    in.raw_x = 100;
+    in.raw_x = AXIS_HALF;
     control_loop_tick(&st, &in, &out);
     TEST_ASSERT(!out.movement_allowed);
     TEST_ASSERT_EQ(out.out_x, 0);
@@ -99,7 +105,7 @@ static void test_slew_limit(void)
     control_loop_joystick_input_t in = { .valid = true, .raw_x = 0, .raw_y = 0, .dead_man_held = true };
     control_loop_tick(&st, &in, &out); /* нейтраль пройдена */
 
-    in.raw_x = 127; /* максимум оси — резкий скачок */
+    in.raw_x = AXIS_MAX; /* максимум оси — резкий скачок */
     int16_t prev = 0;
     for (int i = 0; i < 5; i++) {
         control_loop_tick(&st, &in, &out);
@@ -119,7 +125,7 @@ static void test_invalid_reading_forces_neutral(void)
 
     control_loop_joystick_input_t in = { .valid = true, .raw_x = 0, .raw_y = 0, .dead_man_held = true };
     control_loop_tick(&st, &in, &out);
-    in.raw_x = 127;
+    in.raw_x = AXIS_MAX;
     control_loop_tick(&st, &in, &out);
     TEST_ASSERT(out.out_x > 0);
 

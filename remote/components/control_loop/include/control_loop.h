@@ -21,10 +21,10 @@ typedef struct {
 } control_loop_state_t;
 
 typedef struct {
-    bool valid;           /* показание джойстика получено в этом тике (FR-37.1 — при сбое I2C false) */
-    int16_t raw_x;         /* центрировано, см. nunchuk_decode() */
+    bool valid;           /* показание осей получено в этом тике (FR-37.1 — при сбое чтения ADC false) */
+    int16_t raw_x;         /* центрировано, см. joystick_adc_center() */
     int16_t raw_y;
-    bool dead_man_held;    /* кнопка Z */
+    bool dead_man_held;    /* отдельная кнопка «мёртвая рука» */
 } control_loop_joystick_input_t;
 
 typedef struct {

@@ -1,6 +1,7 @@
 #include "control_loop.h"
 #include "config.h"
-#include "nunchuk.h"
+#include "buttons.h"
+#include "joystick_adc.h"
 #include "telemetry_source.h"
 
 #include "freertos/FreeRTOS.h"
@@ -41,16 +42,18 @@ void control_loop_hal_tick(bool active)
         return;
     }
 
-    nunchuk_sample_t sample;
-    esp_err_t err = nunchuk_hal_read(&sample);
+    joystick_adc_sample_t sample;
+    esp_err_t err = joystick_adc_hal_read(&sample);
 
     control_loop_joystick_input_t in = { 0 };
     in.valid = (err == ESP_OK);
     if (in.valid) {
         in.raw_x = sample.x;
         in.raw_y = sample.y;
-        in.dead_man_held = sample.btn_z;
     }
+    /* «Мёртвая рука» — отдельная кнопка на своём GPIO, к осям джойстика
+     * электрически не относится, поэтому читается независимо от них. */
+    in.dead_man_held = buttons_hal_dead_man_held();
 
     control_loop_output_t out;
     control_loop_tick(&s_state, &in, &out);

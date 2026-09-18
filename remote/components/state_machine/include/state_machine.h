@@ -24,7 +24,7 @@
  */
 
 typedef enum {
-    SM_STATE_WAIT_OFF,             /* FR-1.1 */
+    SM_STATE_WAIT_OFF,             /* FR-1.1, FR-1.2: ждём OFF, в т.ч. после FAULT и «проскоченного» OFF */
     SM_STATE_OFF_WAIT_STOP,        /* FR-5 шаги 1-2: HOLD отправлен, ждём остановки */
     SM_STATE_OFF_WAIT_DISARM_CONFIRM, /* FR-5 шаги 3-4: DISARM отправлен, ждём HEARTBEAT */
     SM_STATE_OFF_IDLE,             /* дизармлено, устойчивое состояние OFF */

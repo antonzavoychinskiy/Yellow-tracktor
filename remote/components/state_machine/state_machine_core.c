@@ -10,6 +10,12 @@ static bool is_local_driving_state(sm_state_t s)
            s == SM_STATE_LOCAL_MODE_LOST || s == SM_STATE_LOCAL_ARM_FAILED;
 }
 
+static bool is_off_state(sm_state_t s)
+{
+    return s == SM_STATE_OFF_WAIT_STOP || s == SM_STATE_OFF_WAIT_DISARM_CONFIRM ||
+           s == SM_STATE_OFF_IDLE || s == SM_STATE_OFF_FAILED;
+}
+
 static void enter_off_sequence(sm_context_t *ctx, int64_t now_ms, sm_outputs_t *out)
 {
     ctx->state = SM_STATE_OFF_WAIT_STOP;
@@ -86,6 +92,17 @@ void sm_tick(sm_context_t *ctx, const sm_inputs_t *in, sm_outputs_t *out)
         if (is_local_driving_state(ctx->state) && in->key != KEY_POS_LOCAL) {
             /* FR-10.1: нейтраль перед командами нового положения ключа. */
             out->cmd_send_neutral_once = true;
+        }
+
+        if (in->key != KEY_POS_OFF && !is_off_state(ctx->state)) {
+            /* FR-1.2: в LOCAL/AUTO входим только из зафиксированного OFF.
+             * Физически ключ LOCAL-OFF-AUTO всегда проходит OFF, но при
+             * быстром повороте OFF может не пережить антидребезг; то же
+             * после FAULT (FR-35) или из WaitOff (FR-1.1). */
+            ctx->state = SM_STATE_WAIT_OFF;
+            ctx->state_entered_ms = in->now_ms;
+            ctx->last_key = in->key;
+            return;
         }
 
         switch (in->key) {

@@ -253,6 +253,164 @@ static void test_local_to_off_neutral_first(void)
     TEST_ASSERT(out.cmd_send_hold);
 }
 
+/* FR-1.2: старт в AUTO, OFF «проскочен» при повороте в LOCAL — без
+ * арминга, ожидание OFF (СЦ-11). */
+static void test_wait_off_auto_to_local_no_arm(void)
+{
+    TEST_CASE("wait_off_auto_to_local_no_arm");
+    sm_context_t ctx;
+    sm_outputs_t out;
+    sm_init(&ctx, KEY_POS_AUTO, 0, &out);
+    TEST_ASSERT_EQ(ctx.state, SM_STATE_WAIT_OFF);
+
+    sm_inputs_t in = base_inputs(KEY_POS_LOCAL, 100);
+    sm_tick(&ctx, &in, &out);
+
+    TEST_ASSERT_EQ(ctx.state, SM_STATE_WAIT_OFF);
+    TEST_ASSERT(!out.cmd_send_arm);
+    TEST_ASSERT(!out.cmd_send_mode_manual);
+}
+
+/* FR-1.2: старт в LOCAL, OFF «проскочен» при повороте в AUTO — не
+ * входим в AUTO, остаёмся в ожидании OFF. */
+static void test_wait_off_local_to_auto_stays_waiting(void)
+{
+    TEST_CASE("wait_off_local_to_auto_stays_waiting");
+    sm_context_t ctx;
+    sm_outputs_t out;
+    sm_init(&ctx, KEY_POS_LOCAL, 0, &out);
+
+    sm_inputs_t in = base_inputs(KEY_POS_AUTO, 100);
+    sm_tick(&ctx, &in, &out);
+
+    TEST_ASSERT_EQ(ctx.state, SM_STATE_WAIT_OFF);
+    TEST_ASSERT(!out.cmd_send_arm);
+    TEST_ASSERT(!out.cmd_send_hold);
+}
+
+/* FR-1.2 + FR-8.1: после отказа арминга быстрый поворот LOCAL -> AUTO ->
+ * LOCAL без зафиксированного OFF не повторяет арминг. */
+static void test_local_arm_failed_fast_turn_no_rearm(void)
+{
+    TEST_CASE("local_arm_failed_fast_turn_no_rearm");
+    sm_context_t ctx;
+    sm_outputs_t out;
+    sm_init(&ctx, KEY_POS_OFF, 0, &out);
+    sm_inputs_t in = base_inputs(KEY_POS_LOCAL, 100);
+    sm_tick(&ctx, &in, &out); /* -> LOCAL_ARMING */
+    in.now_ms = 200;
+    in.arm_ack_received = true;
+    in.arm_ack_accepted = false;
+    sm_tick(&ctx, &in, &out);
+    TEST_ASSERT_EQ(ctx.state, SM_STATE_LOCAL_ARM_FAILED);
+
+    in = base_inputs(KEY_POS_AUTO, 300);
+    sm_tick(&ctx, &in, &out);
+    TEST_ASSERT_EQ(ctx.state, SM_STATE_WAIT_OFF);
+
+    in = base_inputs(KEY_POS_LOCAL, 400);
+    sm_tick(&ctx, &in, &out);
+    TEST_ASSERT_EQ(ctx.state, SM_STATE_WAIT_OFF);
+    TEST_ASSERT(!out.cmd_send_arm);
+    TEST_ASSERT(!out.cmd_send_mode_manual);
+}
+
+/* FR-1.2 + FR-10.1: из LOCAL_ACTIVE ключ сразу в AUTO (OFF не
+ * зафиксирован) — нейтраль и ожидание OFF, без команд режима. */
+static void test_local_active_fast_turn_to_auto(void)
+{
+    TEST_CASE("local_active_fast_turn_to_auto");
+    sm_context_t ctx;
+    sm_outputs_t out;
+    sm_init(&ctx, KEY_POS_OFF, 0, &out);
+    sm_inputs_t in = base_inputs(KEY_POS_LOCAL, 100);
+    sm_tick(&ctx, &in, &out);
+    in.now_ms = 200; in.have_heartbeat = true; in.armed = true; in.custom_mode = ROVER_MODE_MANUAL;
+    sm_tick(&ctx, &in, &out); /* -> LOCAL_ACTIVE */
+    TEST_ASSERT_EQ(ctx.state, SM_STATE_LOCAL_ACTIVE);
+
+    in.now_ms = 300;
+    in.key = KEY_POS_AUTO;
+    sm_tick(&ctx, &in, &out);
+
+    TEST_ASSERT_EQ(ctx.state, SM_STATE_WAIT_OFF);
+    TEST_ASSERT(out.cmd_send_neutral_once);
+    TEST_ASSERT(!out.cmd_send_arm);
+    TEST_ASSERT(!out.cmd_send_mode_manual);
+}
+
+/* FR-1.2: восстановление после FAULT с ключом в LOCAL — без арминга,
+ * ожидание OFF. */
+static void test_fault_to_local_no_arm(void)
+{
+    TEST_CASE("fault_to_local_no_arm");
+    sm_context_t ctx;
+    sm_outputs_t out;
+    sm_init(&ctx, KEY_POS_OFF, 0, &out);
+    sm_inputs_t in = base_inputs(KEY_POS_INVALID, 100);
+    sm_tick(&ctx, &in, &out);
+    TEST_ASSERT_EQ(ctx.state, SM_STATE_FAULT);
+
+    in = base_inputs(KEY_POS_LOCAL, 200);
+    sm_tick(&ctx, &in, &out);
+
+    TEST_ASSERT_EQ(ctx.state, SM_STATE_WAIT_OFF);
+    TEST_ASSERT(!out.cmd_send_arm);
+    TEST_ASSERT(!out.cmd_send_mode_manual);
+    TEST_ASSERT(!out.warn_invalid_key);
+}
+
+/* FR-1.2: старт с недопустимым ключом, затем AUTO — ожидание OFF. */
+static void test_boot_fault_to_auto_waits(void)
+{
+    TEST_CASE("boot_fault_to_auto_waits");
+    sm_context_t ctx;
+    sm_outputs_t out;
+    sm_init(&ctx, KEY_POS_INVALID, 0, &out);
+    TEST_ASSERT_EQ(ctx.state, SM_STATE_FAULT);
+
+    sm_inputs_t in = base_inputs(KEY_POS_AUTO, 100);
+    sm_tick(&ctx, &in, &out);
+    TEST_ASSERT_EQ(ctx.state, SM_STATE_WAIT_OFF);
+}
+
+/* Диаграмма 8А.1: FAULT -> OFF — нормальная OFF-последовательность. */
+static void test_fault_to_off(void)
+{
+    TEST_CASE("fault_to_off");
+    sm_context_t ctx;
+    sm_outputs_t out;
+    sm_init(&ctx, KEY_POS_INVALID, 0, &out);
+
+    sm_inputs_t in = base_inputs(KEY_POS_OFF, 100);
+    sm_tick(&ctx, &in, &out);
+    TEST_ASSERT_EQ(ctx.state, SM_STATE_OFF_WAIT_STOP);
+    TEST_ASSERT(out.cmd_send_hold);
+}
+
+/* 4.1: штатный путь OFF -> AUTO -> OFF -> LOCAL работает как раньше. */
+static void test_normal_off_auto_off_local(void)
+{
+    TEST_CASE("normal_off_auto_off_local");
+    sm_context_t ctx;
+    sm_outputs_t out;
+    sm_init(&ctx, KEY_POS_OFF, 0, &out);
+
+    sm_inputs_t in = base_inputs(KEY_POS_AUTO, 100);
+    sm_tick(&ctx, &in, &out);
+    TEST_ASSERT_EQ(ctx.state, SM_STATE_AUTO);
+    TEST_ASSERT(!out.cmd_send_arm); /* FR-7 */
+
+    in = base_inputs(KEY_POS_OFF, 200);
+    sm_tick(&ctx, &in, &out);
+    TEST_ASSERT_EQ(ctx.state, SM_STATE_OFF_WAIT_STOP);
+
+    in = base_inputs(KEY_POS_LOCAL, 300);
+    sm_tick(&ctx, &in, &out);
+    TEST_ASSERT_EQ(ctx.state, SM_STATE_LOCAL_ARMING);
+    TEST_ASSERT(out.cmd_send_arm);
+}
+
 int main(void)
 {
     test_boot_not_off();
@@ -266,5 +424,13 @@ int main(void)
     test_off_auto_passive_to_mode();
     test_invalid_key_fault();
     test_local_to_off_neutral_first();
+    test_wait_off_auto_to_local_no_arm();
+    test_wait_off_local_to_auto_stays_waiting();
+    test_local_arm_failed_fast_turn_no_rearm();
+    test_local_active_fast_turn_to_auto();
+    test_fault_to_local_no_arm();
+    test_boot_fault_to_auto_waits();
+    test_fault_to_off();
+    test_normal_off_auto_off_local();
     TEST_SUMMARY();
 }

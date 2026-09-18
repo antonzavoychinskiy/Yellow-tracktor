@@ -10,12 +10,13 @@ void auto_sequence_init(auto_sequence_ctx_t *ctx)
     ctx->state = AUTO_SEQ_READY;
 }
 
-static void try_start(auto_sequence_ctx_t *ctx, const auto_sequence_inputs_t *in,
-                       auto_sequence_outputs_t *out)
+static void try_start_confirm(auto_sequence_ctx_t *ctx, const auto_sequence_inputs_t *in)
 {
     if (in->start_pressed && in->route_loaded_this_cycle) {
-        out->cmd_send_arm = true; /* FR-40, FR-7.1: без форсирования */
-        ctx->state = AUTO_SEQ_ARMING;
+        /* FR-40.5: нажатие запускает фазу удержания-подтверждения, а
+         * не сам арм — тот отправляется только по истечении отсчёта
+         * (см. AUTO_SEQ_CONFIRM_COUNTDOWN ниже). */
+        ctx->state = AUTO_SEQ_CONFIRM_HOLD;
         ctx->state_entered_ms = in->now_ms;
     }
     /* FR-40.1: нажатие при !route_loaded_this_cycle просто
@@ -37,16 +38,41 @@ void auto_sequence_tick(auto_sequence_ctx_t *ctx, const auto_sequence_inputs_t *
     case AUTO_SEQ_READY:
     case AUTO_SEQ_BLOCKED:
         ctx->state = in->route_loaded_this_cycle ? AUTO_SEQ_READY : AUTO_SEQ_BLOCKED;
-        try_start(ctx, in, out);
+        try_start_confirm(ctx, in);
+        break;
+
+    case AUTO_SEQ_CONFIRM_HOLD:
+        if (!in->start_held) {
+            /* FR-40.5: раннее отпускание — сброс, без арма. Оператор
+             * начинает заново новым нажатием, свежим фронтом. */
+            ctx->state = AUTO_SEQ_READY;
+            ctx->state_entered_ms = in->now_ms;
+        } else if (in->now_ms - ctx->state_entered_ms >= MODULE_START_CONFIRM_HOLD_MS) {
+            ctx->state = AUTO_SEQ_CONFIRM_COUNTDOWN;
+            ctx->state_entered_ms = in->now_ms;
+        }
+        break;
+
+    case AUTO_SEQ_CONFIRM_COUNTDOWN:
+        /* FR-40.6: необратимо — состояние удержания/отпускания «Пуск»
+         * дальше не проверяется. Единственный выход раньше срабатывания
+         * — верхнеуровневый !in->active (смена ключа из AUTO), уже
+         * обработанный выше. */
+        if (in->now_ms - ctx->state_entered_ms >= MODULE_START_CONFIRM_COUNTDOWN_MS) {
+            out->cmd_send_arm = true; /* FR-40, FR-7.1: без форсирования */
+            ctx->state = AUTO_SEQ_ARMING;
+            ctx->state_entered_ms = in->now_ms;
+        }
         break;
 
     case AUTO_SEQ_ARM_FAILED:
         /* Диаграмма 8А.3: "ArmFailed --> Ready: доступен повтор" —
-         * новое нажатие «Пуск» (FR-40.4, орган моментного действия)
-         * является новым действием оператора, поэтому не противоречит
-         * "без автоматического повтора" из FR-40.2/FR-8.1: сама
-         * прошивка не повторяет команду, повторяет оператор. */
-        try_start(ctx, in, out);
+         * новое удержание «Пуск» (FR-40.5) является новым действием
+         * оператора, поэтому не противоречит "без автоматического
+         * повтора" из FR-40.2/FR-8.1: сама прошивка не повторяет
+         * команду, повторяет оператор — тем же полным жестом
+         * подтверждения, что и первый раз. */
+        try_start_confirm(ctx, in);
         break;
 
     case AUTO_SEQ_ARMING:
@@ -79,4 +105,34 @@ void auto_sequence_tick(auto_sequence_ctx_t *ctx, const auto_sequence_inputs_t *
          * вне зоны ответственности прошивки, раздел 1.3). */
         break;
     }
+}
+
+uint32_t auto_sequence_confirm_hold_progress_permille(const auto_sequence_ctx_t *ctx, int64_t now_ms)
+{
+    if (ctx->state != AUTO_SEQ_CONFIRM_HOLD) {
+        return 0;
+    }
+    int64_t elapsed = now_ms - ctx->state_entered_ms;
+    if (elapsed <= 0) {
+        return 0;
+    }
+    uint64_t permille = ((uint64_t)elapsed * 1000u) / MODULE_START_CONFIRM_HOLD_MS;
+    return permille > 1000u ? 1000u : (uint32_t)permille;
+}
+
+uint32_t auto_sequence_confirm_countdown_seconds_left(const auto_sequence_ctx_t *ctx, int64_t now_ms)
+{
+    if (ctx->state != AUTO_SEQ_CONFIRM_COUNTDOWN) {
+        return 0;
+    }
+    int64_t elapsed = now_ms - ctx->state_entered_ms;
+    if (elapsed < 0) {
+        elapsed = 0;
+    }
+    int64_t remaining_ms = (int64_t)MODULE_START_CONFIRM_COUNTDOWN_MS - elapsed;
+    if (remaining_ms <= 0) {
+        return 0;
+    }
+    /* Округление вверх: «5» держится всю первую секунду отсчёта. */
+    return (uint32_t)((remaining_ms + 999) / 1000);
 }

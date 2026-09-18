@@ -4,7 +4,7 @@ idf_component_register(
     SRCS "lvgl_port.c" "ui.c" "fonts/lv_font_ru_14.c"
     INCLUDE_DIRS "include" "fonts"
     REQUIRES config display state_machine control_loop mission_ui
-             auto_sequence telemetry_source nunchuk esp_timer lvgl
+             auto_sequence telemetry_source joystick_adc esp_timer lvgl
 )
 
 # lv_font_conv генерирует #include "lvgl.h" только под этим макросом

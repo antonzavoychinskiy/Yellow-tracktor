@@ -3,7 +3,7 @@
 idf_component_register(
     SRCS "main.c"
     INCLUDE_DIRS "."
-    REQUIRES config keyswitch buttons encoder nunchuk display
+    REQUIRES config keyswitch buttons encoder joystick_adc display
              telemetry_source control_loop state_machine mission_ui
-             auto_sequence ui_task
+             auto_sequence buzzer ui_task
 )

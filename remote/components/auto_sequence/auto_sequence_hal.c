@@ -27,6 +27,7 @@ void auto_sequence_hal_tick(bool active)
     if (active) {
         in.route_loaded_this_cycle = mission_ui_hal_get_route_loaded_this_cycle();
         in.start_pressed = buttons_hal_start_pressed();
+        in.start_held = buttons_hal_start_held(); /* читать после start_pressed — см. buttons.h */
 
         mavlink_telemetry_snapshot_t snap;
         telemetry_source_get_telemetry_snapshot(&snap);
@@ -54,6 +55,26 @@ auto_sequence_state_t auto_sequence_hal_get_state(void)
     auto_sequence_state_t s;
     xSemaphoreTake(s_mutex, portMAX_DELAY);
     s = s_ctx.state;
+    xSemaphoreGive(s_mutex);
+    return s;
+}
+
+uint32_t auto_sequence_hal_get_confirm_hold_progress_permille(void)
+{
+    uint32_t p;
+    int64_t now_ms = esp_timer_get_time() / 1000;
+    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    p = auto_sequence_confirm_hold_progress_permille(&s_ctx, now_ms);
+    xSemaphoreGive(s_mutex);
+    return p;
+}
+
+uint32_t auto_sequence_hal_get_confirm_countdown_seconds_left(void)
+{
+    uint32_t s;
+    int64_t now_ms = esp_timer_get_time() / 1000;
+    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    s = auto_sequence_confirm_countdown_seconds_left(&s_ctx, now_ms);
     xSemaphoreGive(s_mutex);
     return s;
 }

@@ -7,11 +7,8 @@
 `TODO(stand)` по проекту) — тестовый цикл логики не должен зависеть
 от этого выбора.
 
-На машине, где вёлся код прямо сейчас, компилятора C не нашлось
-(проверялись `gcc`, `clang`, `cl`, `g++`, `tcc`) — тесты не
-прогонялись. Логика каждого теста прослежена вручную построчно против
-соответствующего `*_core.c` при написании, но это не замена реальному
-прогону.
+Все тесты ниже реально прогнаны (MinGW gcc 6.3.0, Windows) и проходят
+полностью — не только прослежены вручную.
 
 ## Сборка и запуск
 
@@ -44,6 +41,11 @@ gcc -std=c11 -I ../../components/config/include \
     -I ../../components/mavlink_bridge/include \
     test_auto_sequence.c ../../components/auto_sequence/auto_sequence_core.c \
     -o test_auto_sequence && ./test_auto_sequence
+
+# test/test_buzzer
+gcc -std=c11 -I ../../components/buzzer/include \
+    test_buzzer.c ../../components/buzzer/buzzer_core.c \
+    -o test_buzzer && ./test_buzzer
 ```
 
 На Windows без `gcc` в PATH — поставить MSYS2/mingw-w64, либо собрать
@@ -52,19 +54,21 @@ ESP-IDF/FreeRTOS зависимостей, платформенно нейтра
 
 ## Что покрыто
 
-- `test_state_machine` — FR-1.1, FR-5/5.1, FR-6, FR-8.1, FR-9/9.1,
+- `test_state_machine` — FR-1.1, FR-1.2, FR-5/5.1, FR-6, FR-8.1, FR-9/9.1,
   FR-10.1, FR-35 (СЦ-6, СЦ-9, СЦ-11).
 - `test_control_loop` — FR-13/14/15/16/17/18/19, FR-37.1 (частично,
   на уровне "невалидное показание -> нейтраль"; сама детекция серии
-  отказов — в `nunchuk_hal.c`, не тестируется на хосте, т.к. это I2C).
+  отказов — в `joystick_adc_hal.c`, не тестируется на хосте, т.к. это ADC).
 - `test_mission_ui` — FR-20.1/20.2/20.3/20.4, FR-21/22/22.1/23/24,
   FR-24.1, FR-25/26 (СЦ-1 шаги 1-4, СЦ-7).
-- `test_auto_sequence` — FR-40/40.1/40.2/40.3/40.4 (СЦ-1 шаги 5-6,
+- `test_auto_sequence` — FR-40/40.1/40.2/40.3/40.5/40.6 (СЦ-1 шаги 5-6,
   СЦ-12).
+- `test_buzzer` — меандр 1/2 Гц зуммера подтверждения (FR-40.5/40.6),
+  чистая функция `buzzer_square_on`.
 
 ## Что НЕ покрыто на хосте (требует стенда или как минимум прошивки)
 
-- Драйверы периферии (`*_hal.c`) — I2C/SPI/GPIO/UART, ESP-IDF-специфика.
+- Драйверы периферии (`*_hal.c`) — ADC/SPI/GPIO/UART, ESP-IDF-специфика.
 - Реальные тайминги MAVLink, watchdog, приоритеты FreeRTOS-задач
   (NFR-1..7).
 - Сценарии СЦ-2, СЦ-3, СЦ-5, СЦ-8, СЦ-10 — требуют реального
