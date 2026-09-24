@@ -57,6 +57,22 @@ static void debug_input_probe_task(void *arg)
     int prev_start = gpio_get_level(MODULE_BUTTON_START_GPIO);
     int prev_enc_sw = gpio_get_level(MODULE_ENCODER_SW_GPIO);
     int prev_dead_man = gpio_get_level(MODULE_DEAD_MAN_GPIO);
+    int prev_buzzer = gpio_get_level(MODULE_BUZZER_GPIO);
+    sm_state_t prev_sm_state = state_machine_get_state();
+    auto_sequence_state_t prev_auto_state = auto_sequence_hal_get_state();
+
+    static const char *sm_state_names[] = {
+        "WAIT_OFF", "OFF_WAIT_STOP", "OFF_WAIT_DISARM_CONFIRM", "OFF_IDLE",
+        "OFF_FAILED", "LOCAL_ARMING", "LOCAL_ARM_FAILED", "LOCAL_ACTIVE",
+        "LOCAL_MODE_LOST", "AUTO", "FAULT",
+    };
+    static const char *auto_state_names[] = {
+        "READY", "BLOCKED", "CONFIRM_HOLD", "CONFIRM_COUNTDOWN", "ARMING",
+        "ARM_FAILED", "SETTING_MODE", "MOVING",
+    };
+
+    ESP_LOGI("debug_input", "sm_state=%s auto_state=%s (initial)",
+             sm_state_names[prev_sm_state], auto_state_names[prev_auto_state]);
 
     for (;;) {
         int64_t now = esp_timer_get_time();
@@ -65,6 +81,9 @@ static void debug_input_probe_task(void *arg)
         int start   = gpio_get_level(MODULE_BUTTON_START_GPIO);
         int enc_sw  = gpio_get_level(MODULE_ENCODER_SW_GPIO);
         int dead_man = gpio_get_level(MODULE_DEAD_MAN_GPIO);
+        int buzzer  = gpio_get_level(MODULE_BUZZER_GPIO);
+        sm_state_t sm_state = state_machine_get_state();
+        auto_sequence_state_t auto_state = auto_sequence_hal_get_state();
 
         if (back != prev_back) {
             ESP_LOGI("debug_input", "EDGE back: %d -> %d", prev_back, back);
@@ -81,6 +100,20 @@ static void debug_input_probe_task(void *arg)
         if (dead_man != prev_dead_man) {
             ESP_LOGI("debug_input", "EDGE dead_man: %d -> %d", prev_dead_man, dead_man);
             prev_dead_man = dead_man;
+        }
+        if (buzzer != prev_buzzer) {
+            ESP_LOGI("debug_input", "EDGE buzzer: %d -> %d", prev_buzzer, buzzer);
+            prev_buzzer = buzzer;
+        }
+        if (sm_state != prev_sm_state) {
+            ESP_LOGI("debug_input", "sm_state: %s -> %s",
+                     sm_state_names[prev_sm_state], sm_state_names[sm_state]);
+            prev_sm_state = sm_state;
+        }
+        if (auto_state != prev_auto_state) {
+            ESP_LOGI("debug_input", "auto_state: %s -> %s",
+                     auto_state_names[prev_auto_state], auto_state_names[auto_state]);
+            prev_auto_state = auto_state;
         }
 
         if (now - last_joy_log_us >= 300000) {
