@@ -37,6 +37,7 @@ static const char *TAG = "module_main";
  * state_machine/ui_task. Удалить после того, как стенд подтверждён.
  */
 #include "driver/gpio.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
