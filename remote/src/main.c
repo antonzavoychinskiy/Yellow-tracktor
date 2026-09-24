@@ -86,7 +86,13 @@ static void debug_input_probe_task(void *arg)
         if (now - last_joy_log_us >= 300000) {
             joystick_adc_sample_t js = {0};
             joystick_adc_hal_read(&js);
-            ESP_LOGI("debug_input", "joy x=%d y=%d", js.x, js.y);
+            /* raw = centered + текущий сконфигурированный центр (см.
+             * joystick_adc_center.c) — печатаем сырое значение ADC,
+             * оно и нужно для подбора MODULE_JOYSTICK_ADC_CENTER_*. */
+            int raw_x = js.x + MODULE_JOYSTICK_ADC_CENTER_X;
+            int raw_y = js.y + MODULE_JOYSTICK_ADC_CENTER_Y;
+            ESP_LOGI("debug_input", "joy raw_x=%d raw_y=%d (centered x=%d y=%d)",
+                     raw_x, raw_y, js.x, js.y);
             last_joy_log_us = now;
         }
 
