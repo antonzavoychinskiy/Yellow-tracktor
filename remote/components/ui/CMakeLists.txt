@@ -1,7 +1,8 @@
 # lvgl подтягивается менеджером компонентов ESP-IDF (idf_component.yml).
 # Проверено сборкой на ESP-IDF 6.0.1: имя компонента в REQUIRES — "lvgl".
 idf_component_register(
-    SRCS "lvgl_port.c" "ui.c" "fonts/lv_font_ru_14.c"
+    SRCS "lvgl_port.c" "ui.c" "fonts/lv_font_ru_14.c" "fonts/lv_font_ru_26_bold.c"
+         "fonts/lv_font_digits_136_bold.c"
     INCLUDE_DIRS "include" "fonts"
     REQUIRES config display state_machine control_loop mission_ui
              auto_sequence telemetry_source joystick_adc esp_timer lvgl

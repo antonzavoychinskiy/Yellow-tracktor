@@ -12,6 +12,8 @@
 
 #include "lvgl.h"
 #include "lv_font_ru_14.h"
+#include "lv_font_ru_26_bold.h"
+#include "lv_font_digits_136_bold.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -48,8 +50,19 @@ static lv_obj_t *s_page_auto;
 static lv_obj_t *s_lbl_auto_mode;
 static lv_obj_t *s_lbl_auto_wp;
 static lv_obj_t *s_lbl_auto_ready;
-static lv_obj_t *s_bar_auto_confirm; /* FR-40.5 */
 static lv_obj_t *s_lbl_auto_battery;
+
+/* FR-40.5: экран удержания «Пуск» — на всю высоту контентной области,
+ * отдельная страница вместо строки+полосы на обычном auto-экране. */
+static lv_obj_t *s_page_confirm_hold;
+static lv_obj_t *s_lbl_confirm_hold_title;
+static lv_obj_t *s_bar_confirm_hold;
+static lv_obj_t *s_lbl_confirm_hold_pct;
+
+/* FR-40.6: экран обратного отсчёта — полноэкранный, синий фон +
+ * крупная цифра. */
+static lv_obj_t *s_page_confirm_countdown;
+static lv_obj_t *s_lbl_confirm_countdown_num;
 
 /* ===================== Вспомогательное ===================== */
 
@@ -97,7 +110,8 @@ static const char *mload_err_text(const char *code)
 static void set_page(lv_obj_t *page)
 {
     lv_obj_t *pages[] = { s_page_wait_off, s_page_list, s_page_card, s_page_result,
-                           s_page_local, s_page_auto };
+                           s_page_local, s_page_auto, s_page_confirm_hold,
+                           s_page_confirm_countdown };
     for (size_t i = 0; i < sizeof(pages) / sizeof(pages[0]); i++) {
         if (pages[i] == page) {
             lv_obj_clear_flag(pages[i], LV_OBJ_FLAG_HIDDEN);
@@ -173,11 +187,64 @@ static void build_pages(void)
     s_lbl_auto_mode = mklabel(s_page_auto);
     s_lbl_auto_wp = mklabel(s_page_auto);
     s_lbl_auto_ready = mklabel(s_page_auto);
-    s_bar_auto_confirm = lv_bar_create(s_page_auto); /* FR-40.5: полоса удержания «Пуск» */
-    lv_obj_set_width(s_bar_auto_confirm, LV_PCT(90));
-    lv_bar_set_range(s_bar_auto_confirm, 0, 1000);
-    lv_obj_add_flag(s_bar_auto_confirm, LV_OBJ_FLAG_HIDDEN);
     s_lbl_auto_battery = mklabel(s_page_auto);
+
+    /* Удержание «Пуск» (FR-40.5) — полноэкранная страница: надпись во
+     * всю ширину крупным шрифтом сверху, полоса подтверждения занимает
+     * всю оставшуюся высоту. Без отступов s_content, чтобы полоса
+     * доходила до краёв экрана. */
+    s_page_confirm_hold = lv_obj_create(s_content);
+    lv_obj_set_size(s_page_confirm_hold, LV_PCT(100), LV_PCT(100));
+    lv_obj_set_flex_flow(s_page_confirm_hold, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(s_page_confirm_hold, 0, 0);
+    lv_obj_set_style_border_width(s_page_confirm_hold, 0, 0);
+
+    s_lbl_confirm_hold_title = lv_label_create(s_page_confirm_hold);
+    lv_obj_set_style_text_font(s_lbl_confirm_hold_title, &lv_font_ru_26_bold, 0);
+    lv_label_set_long_mode(s_lbl_confirm_hold_title, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_align(s_lbl_confirm_hold_title, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_width(s_lbl_confirm_hold_title, LV_PCT(100));
+    lv_obj_set_style_pad_top(s_lbl_confirm_hold_title, 4, 0);
+    lv_obj_set_style_pad_bottom(s_lbl_confirm_hold_title, 4, 0);
+    lv_label_set_text(s_lbl_confirm_hold_title, "Удерживаете «Пуск»");
+
+    lv_obj_t *hold_bar_wrap = lv_obj_create(s_page_confirm_hold);
+    lv_obj_set_width(hold_bar_wrap, LV_PCT(100));
+    lv_obj_set_flex_grow(hold_bar_wrap, 1);
+    lv_obj_set_style_pad_all(hold_bar_wrap, 8, 0);
+    lv_obj_set_style_border_width(hold_bar_wrap, 0, 0);
+    lv_obj_set_style_bg_opa(hold_bar_wrap, LV_OPA_TRANSP, 0);
+
+    s_bar_confirm_hold = lv_bar_create(hold_bar_wrap);
+    lv_obj_set_size(s_bar_confirm_hold, LV_PCT(100), LV_PCT(100));
+    lv_bar_set_range(s_bar_confirm_hold, 0, 1000);
+
+    /* Процент — поверх полосы, с полупрозрачной подложкой, чтобы
+     * оставаться читаемым независимо от того, докуда дошла заливка. */
+    s_lbl_confirm_hold_pct = lv_label_create(hold_bar_wrap);
+    lv_obj_set_style_text_font(s_lbl_confirm_hold_pct, &lv_font_ru_26_bold, 0);
+    lv_obj_set_style_text_color(s_lbl_confirm_hold_pct, lv_color_white(), 0);
+    lv_obj_set_style_bg_color(s_lbl_confirm_hold_pct, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(s_lbl_confirm_hold_pct, LV_OPA_40, 0);
+    lv_obj_set_style_pad_all(s_lbl_confirm_hold_pct, 4, 0);
+    lv_obj_set_style_radius(s_lbl_confirm_hold_pct, 6, 0);
+    lv_obj_align(s_lbl_confirm_hold_pct, LV_ALIGN_CENTER, 0, 0);
+
+    /* Обратный отсчёт (FR-40.6) — весь экран синим, по центру число
+     * секунд на ~80% высоты дисплея (lv_font_digits_136_bold). */
+    s_page_confirm_countdown = lv_obj_create(s_content);
+    lv_obj_set_size(s_page_confirm_countdown, LV_PCT(100), LV_PCT(100));
+    lv_obj_set_style_pad_all(s_page_confirm_countdown, 0, 0);
+    lv_obj_set_style_border_width(s_page_confirm_countdown, 0, 0);
+    lv_obj_set_style_bg_color(s_page_confirm_countdown, lv_palette_main(LV_PALETTE_BLUE), 0);
+    lv_obj_set_style_bg_opa(s_page_confirm_countdown, LV_OPA_COVER, 0);
+    lv_obj_set_flex_flow(s_page_confirm_countdown, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(s_page_confirm_countdown, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
+                           LV_FLEX_ALIGN_CENTER);
+
+    s_lbl_confirm_countdown_num = lv_label_create(s_page_confirm_countdown);
+    lv_obj_set_style_text_font(s_lbl_confirm_countdown_num, &lv_font_digits_136_bold, 0);
+    lv_obj_set_style_text_color(s_lbl_confirm_countdown_num, lv_color_white(), 0);
 }
 
 esp_err_t ui_init(void)
@@ -366,23 +433,16 @@ static void update_auto_page(const mavlink_telemetry_snapshot_t *snap)
     switch (seq_state) {
     case AUTO_SEQ_READY: lv_label_set_text(s_lbl_auto_ready, "Готов к пуску — нажмите «Пуск»"); break;
     case AUTO_SEQ_BLOCKED: lv_label_set_text(s_lbl_auto_ready, "Пуск недоступен: маршрут не загружен"); break; /* FR-40.1 */
-    case AUTO_SEQ_CONFIRM_HOLD: lv_label_set_text(s_lbl_auto_ready, "Удерживайте «Пуск»..."); break; /* FR-40.5 */
-    case AUTO_SEQ_CONFIRM_COUNTDOWN:
-        lv_label_set_text_fmt(s_lbl_auto_ready, "Активация Авторежима через %lu",
-                               (unsigned long)auto_sequence_hal_get_confirm_countdown_seconds_left()); /* FR-40.6 */
-        break;
+    /* AUTO_SEQ_CONFIRM_HOLD и AUTO_SEQ_CONFIRM_COUNTDOWN сюда не
+     * попадают — у них отдельные полноэкранные страницы, см.
+     * update_confirm_hold_page()/update_confirm_countdown_page() и
+     * маршрутизацию в ui_tick(). */
+    case AUTO_SEQ_CONFIRM_HOLD:
+    case AUTO_SEQ_CONFIRM_COUNTDOWN: break;
     case AUTO_SEQ_ARMING: lv_label_set_text(s_lbl_auto_ready, "Арминг..."); break;
     case AUTO_SEQ_ARM_FAILED: lv_label_set_text(s_lbl_auto_ready, "Отказ арминга — нажмите «Пуск» ещё раз"); break;
     case AUTO_SEQ_SETTING_MODE: lv_label_set_text(s_lbl_auto_ready, "Перевод в AUTO..."); break;
     case AUTO_SEQ_MOVING: lv_label_set_text(s_lbl_auto_ready, "Движение по маршруту"); break;
-    }
-
-    if (seq_state == AUTO_SEQ_CONFIRM_HOLD) {
-        lv_bar_set_value(s_bar_auto_confirm, (int32_t)auto_sequence_hal_get_confirm_hold_progress_permille(),
-                          LV_ANIM_OFF);
-        lv_obj_clear_flag(s_bar_auto_confirm, LV_OBJ_FLAG_HIDDEN);
-    } else {
-        lv_obj_add_flag(s_bar_auto_confirm, LV_OBJ_FLAG_HIDDEN);
     }
 
     if (snap->have_sys_status) {
@@ -393,6 +453,19 @@ static void update_auto_page(const mavlink_telemetry_snapshot_t *snap)
     }
 }
 
+static void update_confirm_hold_page(void)
+{
+    uint32_t progress = auto_sequence_hal_get_confirm_hold_progress_permille(); /* FR-40.5 */
+    lv_bar_set_value(s_bar_confirm_hold, (int32_t)progress, LV_ANIM_OFF);
+    lv_label_set_text_fmt(s_lbl_confirm_hold_pct, "%lu%%", (unsigned long)(progress / 10));
+}
+
+static void update_confirm_countdown_page(void)
+{
+    uint32_t secs = auto_sequence_hal_get_confirm_countdown_seconds_left(); /* FR-40.6 */
+    lv_label_set_text_fmt(s_lbl_confirm_countdown_num, "%lu", (unsigned long)secs);
+}
+
 void ui_tick(void)
 {
     sm_state_t sm = state_machine_get_state();
@@ -401,6 +474,10 @@ void ui_tick(void)
 
     update_status_bar(sm, &snap);
     update_warn_banner(sm);
+    /* Может быть скрыта ниже для полноэкранных страниц удержания/отсчёта
+     * «Пуск» (FR-40.5/40.6) — возврат к обычным экранам всегда должен
+     * снова её показывать. */
+    lv_obj_clear_flag(s_status_bar, LV_OBJ_FLAG_HIDDEN);
 
     switch (sm) {
     case SM_STATE_WAIT_OFF:
@@ -433,10 +510,28 @@ void ui_tick(void)
         set_page(s_page_local);
         break;
 
-    case SM_STATE_AUTO:
-        update_auto_page(&snap);
-        set_page(s_page_auto);
+    case SM_STATE_AUTO: {
+        auto_sequence_state_t seq_state = auto_sequence_hal_get_state();
+        switch (seq_state) {
+        case AUTO_SEQ_CONFIRM_HOLD:
+            /* FR-40.5: полноэкранная полоса — статус-строка временно
+             * скрыта, ей просто негде поместиться. */
+            lv_obj_add_flag(s_status_bar, LV_OBJ_FLAG_HIDDEN);
+            update_confirm_hold_page();
+            set_page(s_page_confirm_hold);
+            break;
+        case AUTO_SEQ_CONFIRM_COUNTDOWN:
+            lv_obj_add_flag(s_status_bar, LV_OBJ_FLAG_HIDDEN); /* FR-40.6 */
+            update_confirm_countdown_page();
+            set_page(s_page_confirm_countdown);
+            break;
+        default:
+            update_auto_page(&snap);
+            set_page(s_page_auto);
+            break;
+        }
         break;
+    }
 
     case SM_STATE_FAULT:
         /* Баннер (update_warn_banner) уже показывает причину;

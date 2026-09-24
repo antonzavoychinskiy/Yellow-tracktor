@@ -89,10 +89,13 @@
  * монтажа — временно занижено для отладки на макетке. */
 #define MODULE_DISPLAY_SPI_HZ       (5 * 1000 * 1000)
 
-/* Энкодер */
-#define MODULE_ENCODER_CLK_GPIO     32
-#define MODULE_ENCODER_DT_GPIO      33
-#define MODULE_ENCODER_SW_GPIO      27   /* «OK» / «Загрузить» */
+/* Энкодер — модуль EC11 на плате с кнопкой и ручкой (заменил HW-040).
+ * Соответствие пинов: S1 = CLK, S2 = DT, KEY = SW. Питание модуля —
+ * только 3.3 В. Если вращение идёт в обратную сторону — поменять
+ * провода S1 и S2 местами. */
+#define MODULE_ENCODER_CLK_GPIO     32   /* S1 */
+#define MODULE_ENCODER_DT_GPIO      33   /* S2 */
+#define MODULE_ENCODER_SW_GPIO      27   /* KEY, «OK» / «Загрузить» */
 
 /* Кнопки */
 #define MODULE_BUTTON_BACK_GPIO     19
