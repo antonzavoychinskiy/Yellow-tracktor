@@ -28,6 +28,40 @@
 
 static const char *TAG = "module_main";
 
+#if MODULE_SYNTHETIC_MODE
+/*
+ * Временный отладочный вывод сырых показаний входов — только в сборке
+ * debug_synthetic, для стендовой проверки пульта на столе без
+ * Pixhawk. Читает GPIO напрямую (не через buttons_hal_*), чтобы не
+ * "съедать" фронты нажатий, которые в этом же тике должны увидеть
+ * state_machine/ui_task. Удалить после того, как стенд подтверждён.
+ */
+#include "driver/gpio.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
+static void debug_input_probe_task(void *arg)
+{
+    (void)arg;
+    for (;;) {
+        joystick_adc_sample_t js = {0};
+        joystick_adc_hal_read(&js);
+
+        /* Активный уровень везде low (см. config.h): 0 — нажата/удержана. */
+        int back    = gpio_get_level(MODULE_BUTTON_BACK_GPIO);
+        int start   = gpio_get_level(MODULE_BUTTON_START_GPIO);
+        int enc_sw  = gpio_get_level(MODULE_ENCODER_SW_GPIO);
+        int dead_man = gpio_get_level(MODULE_DEAD_MAN_GPIO);
+
+        ESP_LOGI("debug_input",
+                 "joy x=%d y=%d | back=%d start=%d enc_sw=%d dead_man=%d (0=нажата)",
+                 js.x, js.y, back, start, enc_sw, dead_man);
+
+        vTaskDelay(pdMS_TO_TICKS(300));
+    }
+}
+#endif
+
 void app_main(void)
 {
     ESP_LOGI(TAG, "esp_display module starting (synthetic_mode=%d)",
@@ -48,4 +82,8 @@ void app_main(void)
     ESP_ERROR_CHECK(ui_task_start());
 
     ESP_LOGI(TAG, "RT task on core 0, UI task on core 1 started");
+
+#if MODULE_SYNTHETIC_MODE
+    xTaskCreate(debug_input_probe_task, "debug_input_probe", 3072, NULL, 1, NULL);
+#endif
 }
