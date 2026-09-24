@@ -43,21 +43,53 @@ static const char *TAG = "module_main";
 static void debug_input_probe_task(void *arg)
 {
     (void)arg;
-    for (;;) {
-        joystick_adc_sample_t js = {0};
-        joystick_adc_hal_read(&js);
 
-        /* Активный уровень везде low (см. config.h): 0 — нажата/удержана. */
+    /* Раз в 300 мс — грубый снимок джойстика, для него точный тайминг не
+     * важен. */
+    int64_t last_joy_log_us = 0;
+
+    /* Кнопки/энкодер логируются СРАЗУ при каждом изменении сырого
+     * уровня (не по таймеру) — иначе короткий дребезг короче периода
+     * опроса просто не попадёт в лог. Поэтому сам опрос идёт часто
+     * (каждые 2 мс), а печать — только при реальной смене уровня. */
+    int prev_back = gpio_get_level(MODULE_BUTTON_BACK_GPIO);
+    int prev_start = gpio_get_level(MODULE_BUTTON_START_GPIO);
+    int prev_enc_sw = gpio_get_level(MODULE_ENCODER_SW_GPIO);
+    int prev_dead_man = gpio_get_level(MODULE_DEAD_MAN_GPIO);
+
+    for (;;) {
+        int64_t now = esp_timer_get_time();
+
         int back    = gpio_get_level(MODULE_BUTTON_BACK_GPIO);
         int start   = gpio_get_level(MODULE_BUTTON_START_GPIO);
         int enc_sw  = gpio_get_level(MODULE_ENCODER_SW_GPIO);
         int dead_man = gpio_get_level(MODULE_DEAD_MAN_GPIO);
 
-        ESP_LOGI("debug_input",
-                 "joy x=%d y=%d | back=%d start=%d enc_sw=%d dead_man=%d (0=нажата)",
-                 js.x, js.y, back, start, enc_sw, dead_man);
+        if (back != prev_back) {
+            ESP_LOGI("debug_input", "EDGE back: %d -> %d", prev_back, back);
+            prev_back = back;
+        }
+        if (start != prev_start) {
+            ESP_LOGI("debug_input", "EDGE start: %d -> %d", prev_start, start);
+            prev_start = start;
+        }
+        if (enc_sw != prev_enc_sw) {
+            ESP_LOGI("debug_input", "EDGE enc_sw: %d -> %d", prev_enc_sw, enc_sw);
+            prev_enc_sw = enc_sw;
+        }
+        if (dead_man != prev_dead_man) {
+            ESP_LOGI("debug_input", "EDGE dead_man: %d -> %d", prev_dead_man, dead_man);
+            prev_dead_man = dead_man;
+        }
 
-        vTaskDelay(pdMS_TO_TICKS(300));
+        if (now - last_joy_log_us >= 300000) {
+            joystick_adc_sample_t js = {0};
+            joystick_adc_hal_read(&js);
+            ESP_LOGI("debug_input", "joy x=%d y=%d", js.x, js.y);
+            last_joy_log_us = now;
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(2));
     }
 }
 #endif
