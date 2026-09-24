@@ -126,11 +126,8 @@
 #define MODULE_BUZZER_GPIO                 26
 
 /* Ключ (трёхпозиционный, последовательный LOCAL-OFF-AUTO: между LOCAL и AUTO — всегда OFF) */
-/* Стенд (2026-09-хх, после пересборки в новом корпусе): контакты LOCAL
- * и AUTO физически перепутаны местами на разъёме — поменяно здесь
- * программно (без перепайки). */
-#define MODULE_KEY_LOCAL_GPIO       35   /* input-only, БЕЗ внутренней подтяжки */
-#define MODULE_KEY_AUTO_GPIO        34   /* input-only, БЕЗ внутренней подтяжки */
+#define MODULE_KEY_LOCAL_GPIO       34   /* input-only, БЕЗ внутренней подтяжки */
+#define MODULE_KEY_AUTO_GPIO        35   /* input-only, БЕЗ внутренней подтяжки */
 
 /* GPIO34/35 на ESP32 не имеют внутренних подтягивающих резисторов —
  * внешние pull-down ОБЯЗАТЕЛЬНЫ в схеме (контакт замкнут = уровень
